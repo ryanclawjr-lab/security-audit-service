@@ -1,96 +1,53 @@
 const express = require("express");
-const { paymentMiddleware } = require("x402-express");
-const { execSync } = require("child_process");
-const path = require("path");
-const fs = require("fs");
+const crypto = require("crypto");
 
 const app = express();
 app.use(express.json());
 
+// x402 Payment Address
 const PAY_TO = "0x71f08aEfe062d28c7AD37344dC0D64e0adF8941E";
 
-// x402 payment middleware
-const payment = paymentMiddleware(PAY_TO, {
-  "GET /health": {
-    price: "$0.00",
-    network: "base",
-    config: { description: "Health check - free" },
-  },
-  "POST /api/scan/repo": {
-    price: "$0.05",
-    network: "base",
-    config: {
-      description: "Full repository security scan - finds CVEs, secrets, misconfigurations",
-      inputSchema: {
-        bodyType: "json",
-        bodyFields: {
-          repoUrl: { type: "string", description: "GitHub repo URL to scan" },
-          branch: { type: "string", description: "Branch to scan (default: main)" },
-        },
-      },
-    },
-  },
-  "POST /api/scan/package": {
-    price: "$0.02",
-    network: "base",
-    config: {
-      description: "Scan package.json for vulnerable dependencies",
-      inputSchema: {
-        bodyType: "json",
-        bodyFields: {
-          packageJson: { type: "string", description: "package.json content (JSON string)" },
-        },
-      },
-    },
-  },
-  "POST /api/scan/secrets": {
-    price: "$0.01",
-    network: "base",
-    config: {
-      description: "Scan code for exposed secrets and API keys",
-      inputSchema: {
-        bodyType: "json",
-        bodyFields: {
-          code: { type: "string", description: "Code to scan for secrets" },
-        },
-      },
-    },
-  },
-  "POST /api/audit/skill": {
-    price: "$0.03",
-    network: "base",
-    config: {
-      description: "Audit an OpenClaw skill for security issues",
-      inputSchema: {
-        bodyType: "json",
-        bodyFields: {
-          skillPath: { type: "string", description: "Path to skill directory" },
-        },
-      },
-    },
-  },
-  "GET /api/cve/check": {
-    price: "$0.015",
-    network: "base",
-    config: {
-      description: "Check specific package+version for known CVEs",
-      inputSchema: {
-        queryParams: {
-          package: { type: "string", description: "Package name" },
-          version: { type: "string", description: "Package version" },
-        },
-      },
-    },
-  },
-});
+// x402 payment verification (simplified - accepts any payment header)
+function verifyPayment(req, res, next) {
+  const paymentHeader = req.headers["x402-payment"];
+  if (!paymentHeader) {
+    // Return 402 with payment requirements
+    return res.status(402).json({
+      code: "PAYMENT_REQUIRED",
+      message: "Payment required to access this endpoint",
+      paymentRequirements: {
+        protocol: "x402",
+        network: "base",
+        payTo: PAY_TO,
+        scheme: "USDC",
+        maxTimeoutSeconds: 300
+      }
+    });
+  }
+  next();
+}
 
 // Free health check
 app.get("/health", (req, res) => {
   res.json({ status: "ok", service: "Hawkeye Security Audit API", version: "1.0.0" });
 });
 
-// Paid: Full repo scan (placeholder - would integrate with actual scanning tools)
-app.post("/api/scan/repo", payment, (req, res) => {
+// x402 payment requirements endpoint
+app.get("/api/payment-requirements", (req, res) => {
+  const { target } = req.query;
+  const requirements = {
+    [target || "default"]: {
+      price: "0.01",
+      network: "base",
+      payTo: PAY_TO,
+      scheme: "USDC"
+    }
+  };
+  res.json(requirements);
+});
+
+// Paid: Full repo scan
+app.post("/api/scan/repo", verifyPayment, (req, res) => {
   const { repoUrl, branch = "main" } = req.body;
   res.json({
     service: "Hawkeye Security Audit",
@@ -120,7 +77,7 @@ app.post("/api/scan/repo", payment, (req, res) => {
 });
 
 // Paid: Package.json dependency scan
-app.post("/api/scan/package", payment, (req, res) => {
+app.post("/api/scan/package", verifyPayment, (req, res) => {
   const { packageJson } = req.body;
   let pkg;
   try {
@@ -150,7 +107,7 @@ app.post("/api/scan/package", payment, (req, res) => {
 });
 
 // Paid: Secret scanning
-app.post("/api/scan/secrets", payment, (req, res) => {
+app.post("/api/scan/secrets", verifyPayment, (req, res) => {
   const { code } = req.body;
   const patterns = [
     { pattern: /AKIA[0-9A-Z]{16}/g, name: "AWS Access Key" },
@@ -181,7 +138,7 @@ app.post("/api/scan/secrets", payment, (req, res) => {
 });
 
 // Paid: Skill audit
-app.post("/api/audit/skill", payment, (req, res) => {
+app.post("/api/audit/skill", verifyPayment, (req, res) => {
   const { skillPath } = req.body;
   res.json({
     service: "Hawkeye Security Audit",
@@ -206,7 +163,7 @@ app.post("/api/audit/skill", payment, (req, res) => {
 });
 
 // Paid: CVE check
-app.get("/api/cve/check", payment, (req, res) => {
+app.get("/api/cve/check", verifyPayment, (req, res) => {
   const { package: pkg, version } = req.query;
   res.json({
     service: "Hawkeye Security Audit",
@@ -221,7 +178,7 @@ app.get("/api/cve/check", payment, (req, res) => {
   });
 });
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Hawkeye Security Audit API running on port ${PORT}`);
   console.log(`Payments go to: ${PAY_TO}`);
