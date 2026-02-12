@@ -114,7 +114,7 @@ app.post("/api/scan/secrets", verifyPayment, (req, res) => {
     { pattern: /ghp_[0-9a-zA-Z]{36}/g, name: "GitHub Token" },
     { pattern: /xox[baprs]-([0-9a-zA-Z]{10,48})/g, name: "Slack Token" },
     { pattern: /sk_live_[0-9a-zA-Z]{24,}/g, name: "Stripe Key" },
-    { pattern: /eyJ[a-zA-Z0-9_-*\.]{10,}/g, name: "JWT Token" },
+    { pattern: /eyJ[a-zA-Z0-9_.\\-][a-zA-Z0-9_.\\-]{9,}/g, name: "JWT Token" },
   ];
   const findings = [];
   patterns.forEach(({ pattern, name }) => {
