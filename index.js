@@ -106,25 +106,22 @@ app.post("/api/scan/package", verifyPayment, (req, res) => {
   });
 });
 
-// Paid: Secret scanning
+// Paid: Secret scanning (simple patterns only - no complex regex)
 app.post("/api/scan/secrets", verifyPayment, (req, res) => {
   const { code } = req.body;
-  const patterns = [
-    { pattern: /AKIA[0-9A-Z]{16}/g, name: "AWS Access Key" },
-    { pattern: /ghp_[0-9a-zA-Z]{36}/g, name: "GitHub Token" },
-    { pattern: /xox[baprs]-([0-9a-zA-Z]{10,48})/g, name: "Slack Token" },
-    { pattern: /sk_live_[0-9a-zA-Z]{24,}/g, name: "Stripe Key" },
-    { pattern: /eyJ[a-zA-Z0-9_.\\-][a-zA-Z0-9_.\\-]{9,}/g, name: "JWT Token" },
-  ];
   const findings = [];
-  patterns.forEach(({ pattern, name }) => {
-    const matches = code.match(pattern);
-    if (matches) {
-      matches.forEach(m => {
-        findings.push({ type: name, severity: "critical", match: m.substring(0, 8) + "..." });
-      });
-    }
-  });
+  
+  // Simple string checks
+  if (code.includes("AKIA") && code.match(/AKIA[0-9A-Z]{16}/)) {
+    findings.push({ type: "AWS Access Key", severity: "critical", match: "AKIA..." });
+  }
+  if (code.includes("ghp_") && code.match(/ghp_[0-9a-zA-Z]{36}/)) {
+    findings.push({ type: "GitHub Token", severity: "critical", match: "ghp_..." });
+  }
+  if (code.includes("sk_live_")) {
+    findings.push({ type: "Stripe Key", severity: "critical", match: "sk_live_..." });
+  }
+  
   res.json({
     service: "Hawkeye Security Audit",
     scanType: "secret-scan",
